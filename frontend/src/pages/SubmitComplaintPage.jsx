@@ -91,7 +91,9 @@ export default function SubmitComplaintPage() {
             headers: { 'Content-Type': 'multipart/form-data' }
           });
         } catch (evErr) {
-          throw new Error(`Complaint ${complaint.complaint_number} was created, but the photo upload failed. Open the complaint to retry uploading evidence. ${evErr.response?.data?.error || evErr.message || ''}`);
+          const partialError = new Error(`Complaint ${complaint.complaint_number} was created, but the photo upload failed. ${evErr.response?.data?.error || evErr.message || 'Please retry the evidence upload.'}`);
+          partialError.complaintId = complaint.id;
+          throw partialError;
         }
       }
 
@@ -110,6 +112,7 @@ export default function SubmitComplaintPage() {
         : err.message || 'Failed to submit complaint. Please try again.');
       setError(msg);
       toast.error(msg);
+      if (err.complaintId) navigate(`/complaints/${err.complaintId}`);
     }
   });
 
@@ -271,7 +274,7 @@ export default function SubmitComplaintPage() {
                 Take Photo with Camera or Upload Evidence
               </div>
               <p style={{ fontSize: '11px', color: 'var(--muted-foreground)', marginTop: '4px' }}>
-                JPG, PNG, WebP supported. File will be cryptographically hashed (SHA-256) on-chain.
+                JPG, PNG, WebP supported. The server calculates a SHA-256 hash and stores it with the evidence record.
               </p>
             </div>
           ) : (
