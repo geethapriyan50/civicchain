@@ -105,6 +105,33 @@ export async function uploadEvidence(req, res) {
   }
 }
 
+export async function getEvidenceFile(req, res) {
+  try {
+    const db = getDb();
+    const evidence = await db.get(
+      'SELECT e.*, c.citizen_id FROM evidence e JOIN complaints c ON e.complaint_id = c.id WHERE e.id = ?',
+      req.params.id
+    );
+    if (!evidence) return res.status(404).json({ error: 'Evidence not found' });
+    const canView = ['AUTHORITY', 'ADMIN', 'INVESTIGATOR', 'VERIFIER'].includes(req.user.role) || req.user.id === evidence.citizen_id;
+    if (!canView) return res.status(403).json({ error: 'Access denied' });
+    const resolvedPath = path.resolve(evidence.file_path);
+    const evidenceDirectory = path.resolve(UPLOAD_PATH, 'evidence') + path.sep;
+    if (!resolvedPath.startsWith(evidenceDirectory)) return res.status(400).json({ error: 'Invalid evidence path' });
+    if (!fs.existsSync(resolvedPath)) return res.status(404).json({ error: 'Evidence file is missing' });
+    res.setHeader('Content-Type', evidence.mime_type || 'application/octet-stream');
+    res.setHeader('Content-Length', evidence.file_size);
+    res.setHeader('Content-Disposition', "inline; filename*=UTF-8''" + encodeURIComponent(evidence.original_name || evidence.filename));
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    fs.createReadStream(resolvedPath).on('error', err => {
+      console.error('Evidence stream error:', err);
+      if (!res.headersSent) res.status(500).json({ error: 'Failed to read evidence file' }); else res.destroy(err);
+    }).pipe(res);
+  } catch (err) {
+    console.error('Get evidence file error:', err);
+    if (!res.headersSent) res.status(500).json({ error: 'Failed to retrieve evidence file' });
+  }
+}
 export async function verifyEvidence(req, res) {
   try {
     const db = getDb();
@@ -113,6 +140,8 @@ export async function verifyEvidence(req, res) {
       req.params.id
     );
     if (!evidence) return res.status(404).json({ error: 'Evidence not found' });
+    const canVerify = ['AUTHORITY', 'ADMIN', 'INVESTIGATOR', 'VERIFIER'].includes(req.user.role) || req.user.id === evidence.citizen_id;
+    if (!canVerify) return res.status(403).json({ error: 'Access denied' });
 
     let currentHash = null;
     let fileExists = false;
