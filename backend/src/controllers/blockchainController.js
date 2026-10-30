@@ -75,15 +75,19 @@ export async function verifyLedgerIntegrity(req, res) {
           auditLog.push({ type: 'EVIDENCE', id: e.id, status: 'VERIFIED' });
         }
       } else {
-        auditLog.push({ type: 'EVIDENCE', id: e.id, status: 'VERIFIED_ON_RECORD' });
+        discrepancies++;
+        auditLog.push({ type: 'EVIDENCE', id: e.id, status: 'MISSING_FILE' });
       }
     }
 
     const isSecure = discrepancies === 0;
+    const isMock = (process.env.BLOCKCHAIN_MODE || 'mock') !== 'fabric';
 
     res.json({
       verified: isSecure,
-      status: isSecure ? 'CRYPTOGRAPHICALLY_VERIFIED' : 'INTEGRITY_VIOLATION_DETECTED',
+      status: !isSecure ? 'INTEGRITY_VIOLATION_DETECTED' : isMock ? 'LOCAL_RECORDS_VERIFIED_ONLY' : 'LOCAL_INTEGRITY_VERIFIED',
+      ledgerMode: isMock ? 'mock' : 'fabric',
+      note: isMock ? 'Local records and evidence hashes checked; no independent blockchain verification performed.' : 'Local records and evidence hashes checked; this does not independently attest Fabric consensus.',
       totalRecordsAudited: totalChecked,
       discrepancies,
       auditTimestamp: new Date().toISOString(),
