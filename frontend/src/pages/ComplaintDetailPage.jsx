@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import api, { getApiBaseUrl } from '../services/api';
+import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { StatusBadge, PriorityBadge, LoadingSpinner, InfoRow } from '../components/ui';
 import { Upload, CheckCircle, AlertTriangle, Shield, ExternalLink } from 'lucide-react';
@@ -115,6 +115,17 @@ export default function ComplaintDetailPage() {
     }
   };
 
+  const openEvidenceFile = async (evidenceId) => {
+    try {
+      const response = await api.get('/evidence/' + evidenceId + '/file', { responseType: 'blob' });
+      const objectUrl = URL.createObjectURL(response.data);
+      window.open(objectUrl, '_blank', 'noopener,noreferrer');
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Unable to open evidence file');
+    }
+  };
+
   const verifyEvidence = async (evidenceId) => {
     try {
       const { data } = await api.get(`/evidence/${evidenceId}/verify`);
@@ -202,9 +213,9 @@ export default function ComplaintDetailPage() {
                       <Shield size={14} /> Verify
                     </button>
                     {ev.mime_type?.startsWith('image/') && (
-                      <a href={`${getApiBaseUrl().replace(/\/+$/, '').replace(/\/api$/, '')}/api/evidence/${ev.id}/file`} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm">
+                      <button type="button" onClick={() => openEvidenceFile(ev.id)} className="btn btn-secondary btn-sm" title="Open evidence">
                         <ExternalLink size={14} />
-                      </a>
+                      </button>
                     )}
                   </div>
                 </div>
