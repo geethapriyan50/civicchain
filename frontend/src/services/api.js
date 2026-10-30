@@ -16,12 +16,13 @@ export const isNativePlatform = () => {
 
 export const getApiBaseUrl = () => {
   if (typeof window === 'undefined') return '/api';
+  // A production build's backend URL must override stale device-local settings.
+  if (import.meta.env?.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL.trim().replace(/\\/+$/, '');
+  }
+
   const stored = localStorage.getItem('civicchain_api_url');
   if (stored && stored.trim()) return stored.trim();
-  
-  if (import.meta.env?.VITE_API_URL) {
-    return import.meta.env.VITE_API_URL;
-  }
   
   if (isNativePlatform()) {
     // Default fallback for Android Emulator
