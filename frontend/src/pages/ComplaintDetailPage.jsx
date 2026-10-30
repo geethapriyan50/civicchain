@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import api from '../services/api';
+import api, { getApiBaseUrl } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { StatusBadge, PriorityBadge, LoadingSpinner, InfoRow } from '../components/ui';
 import { Upload, CheckCircle, AlertTriangle, Shield, ExternalLink } from 'lucide-react';
@@ -202,7 +202,7 @@ export default function ComplaintDetailPage() {
                       <Shield size={14} /> Verify
                     </button>
                     {ev.mime_type?.startsWith('image/') && (
-                      <a href={`/uploads/evidence/${ev.filename}`} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm">
+                      <a href={`${getApiBaseUrl().replace(/\/+$/, '').replace(/\/api$/, '')}/api/evidence/${ev.id}/file`} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm">
                         <ExternalLink size={14} />
                       </a>
                     )}
