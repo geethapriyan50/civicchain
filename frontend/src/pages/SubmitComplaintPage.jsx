@@ -91,7 +91,9 @@ export default function SubmitComplaintPage() {
             headers: { 'Content-Type': 'multipart/form-data' }
           });
         } catch (evErr) {
-          console.warn('Evidence upload non-fatal:', evErr);
+          const partialError = new Error(`Complaint ${complaint.complaint_number} was created, but the photo upload failed. ${evErr.response?.data?.error || evErr.message || 'Please retry the evidence upload.'}`);
+          partialError.complaintId = complaint.id;
+          throw partialError;
         }
       }
 
@@ -101,7 +103,7 @@ export default function SubmitComplaintPage() {
       qc.invalidateQueries(['complaints']);
       qc.invalidateQueries(['citizen-dashboard']);
       qc.invalidateQueries(['blockchain-explorer-ledger']);
-      toast.success(`Complaint ${data.complaint.complaint_number} minted to blockchain!`);
+      toast.success(`Complaint ${data.complaint.complaint_number} submitted successfully!`);
       navigate(`/complaints/${data.complaint.id}`);
     },
     onError: (err) => {
@@ -110,6 +112,7 @@ export default function SubmitComplaintPage() {
         : err.message || 'Failed to submit complaint. Please try again.');
       setError(msg);
       toast.error(msg);
+      if (err.complaintId) navigate(`/complaints/${err.complaintId}`);
     }
   });
 
@@ -168,7 +171,7 @@ export default function SubmitComplaintPage() {
             File Civic Grievance
           </h1>
           <p style={{ color: 'var(--muted-foreground)', marginTop: '4px' }}>
-            Report broken public infrastructure. All submissions are timestamped and cryptographically anchored to Hyperledger Fabric.
+            Report broken public infrastructure. Submissions are timestamped and recorded in the configured ledger mode.
           </p>
         </div>
       </div>
@@ -271,7 +274,7 @@ export default function SubmitComplaintPage() {
                 Take Photo with Camera or Upload Evidence
               </div>
               <p style={{ fontSize: '11px', color: 'var(--muted-foreground)', marginTop: '4px' }}>
-                JPG, PNG, WebP supported. File will be cryptographically hashed (SHA-256) on-chain.
+                JPG, PNG, WebP supported. The server calculates a SHA-256 hash and stores it with the evidence record.
               </p>
             </div>
           ) : (
@@ -316,7 +319,7 @@ export default function SubmitComplaintPage() {
                     display: 'inline-block',
                     wordBreak: 'break-all'
                   }}>
-                    SHA-256: {photoHash.slice(0, 24)}... (Anchored to ledger)
+                    SHA-256: {photoHash.slice(0, 24)}... (Calculated locally)
                   </div>
                 )}
               </div>

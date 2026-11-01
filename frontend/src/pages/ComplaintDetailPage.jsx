@@ -277,6 +277,17 @@ export default function ComplaintDetailPage() {
     }
   };
 
+  const openEvidenceFile = async (evidenceId) => {
+    try {
+      const response = await api.get('/evidence/' + evidenceId + '/file', { responseType: 'blob' });
+      const objectUrl = URL.createObjectURL(response.data);
+      window.open(objectUrl, '_blank', 'noopener,noreferrer');
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Unable to open evidence file');
+    }
+  };
+
   const verifyEvidence = async (evidenceId) => {
     try {
       const { data } = await api.get(`/evidence/${evidenceId}/verify`);
