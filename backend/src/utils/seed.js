@@ -5,6 +5,7 @@ import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
 import { initDatabase, getDb } from '../config/database.js';
+import { getBlockchainService } from '../services/blockchainService.js';
 
 const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS) || 10;
 
@@ -172,24 +173,32 @@ async function seed() {
       const num = `CC-${new Date().getFullYear()}-${String(seq++).padStart(5, '0')}`;
       const now = new Date().toISOString();
       const txId = mockTx('SEED', id);
-      const payloadHash = crypto.createHash('sha256').update(id + c.title).digest('hex');
+
+      const bcRec = await getBlockchainService().appendRecord({
+        complaintId: id,
+        eventType: `STATE_${c.status}`,
+        payload: {
+          type: `STATE_${c.status}`,
+          complaintId: id,
+          title: c.title,
+          category: c.category,
+          status: c.status,
+          timestamp: now
+        },
+        txId,
+        customTimestamp: now
+      });
 
       await db.run(
         `INSERT INTO complaints (id, complaint_number, citizen_id, category, title, description, location, status, priority, is_anonymous, assigned_department, blockchain_tx_id, blockchain_hash, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [id, num, userMap['CITIZEN'], c.category, c.title, c.description, c.location, c.status, c.priority, c.is_anonymous, c.department || null, txId, payloadHash, now, now]
+        [id, num, userMap['CITIZEN'], c.category, c.title, c.description, c.location, c.status, c.priority, c.is_anonymous, c.department || null, bcRec.txId, bcRec.recordHash, now, now]
       );
 
       await db.run(
         `INSERT INTO complaint_events (id, complaint_id, event_type, from_status, to_status, performed_by, performer_role, notes, blockchain_tx_id, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [uuidv4(), id, c.status, null, c.status, userMap['CITIZEN'], 'CITIZEN', 'Complaint recorded on ledger', txId, now]
-      );
-
-      await db.run(
-        `INSERT INTO blockchain_records (id, tx_id, complaint_id, event_type, payload_hash, block_number, timestamp, mode, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [uuidv4(), txId, id, `STATE_${c.status}`, payloadHash, Math.floor(Math.random() * 500000) + 100000, now, 'mock', now]
+        [uuidv4(), id, c.status, null, c.status, userMap['CITIZEN'], 'CITIZEN', 'Complaint recorded on ledger', bcRec.txId, now]
       );
 
       console.log(`  ✅ Seeded complaint: ${num} - ${c.title} [${c.status}]`);

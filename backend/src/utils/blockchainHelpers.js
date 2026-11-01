@@ -44,14 +44,15 @@ function mockTxId(type, complaintId) {
   return `MOCK:${type}:${(complaintId || 'SYSTEM').slice(-8).toUpperCase()}:${ts}:${rand}`;
 }
 
-// Async mock blockchain adapter that uses the sqlite async db
+// Async mock blockchain adapter that appends to cryptographic hash chain
 async function createBlockchainRecord(db, txId, complaintId, eventType, payloadHash, mode = 'mock') {
-  const blockNumber = Math.floor(Math.random() * 900000) + 100000;
-  await db.run(
-    `INSERT INTO blockchain_records (id, tx_id, complaint_id, event_type, payload_hash, block_number, timestamp, mode, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [uuidv4(), txId, complaintId, eventType, payloadHash, blockNumber, new Date().toISOString(), mode, new Date().toISOString()]
-  );
+  const service = getBlockchainService();
+  return await service.appendRecord({
+    complaintId,
+    eventType,
+    payload: { eventType, complaintId, payloadHash },
+    txId
+  });
 }
 
 export { validateTransition, VALID_TRANSITIONS };

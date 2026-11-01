@@ -15,20 +15,24 @@ export const isNativePlatform = () => {
 };
 
 export const getApiBaseUrl = () => {
-  if (typeof window === 'undefined') return '/api';
+  if (typeof window === 'undefined') return 'https://civicchain-8b15.onrender.com/api';
   const stored = localStorage.getItem('civicchain_api_url');
-  if (stored && stored.trim()) return stored.trim();
+  
+  // If stored value is an obsolete localhost or 10.0.2.2 on a physical phone, reset to Render cloud
+  if (stored && stored.trim()) {
+    const s = stored.trim();
+    if (isNativePlatform() && (s.includes('10.0.2.2') || s.includes('localhost') || s.includes('127.0.0.1'))) {
+      localStorage.setItem('civicchain_api_url', 'https://civicchain-8b15.onrender.com/api');
+      return 'https://civicchain-8b15.onrender.com/api';
+    }
+    return s;
+  }
   
   if (import.meta.env?.VITE_API_URL) {
     return import.meta.env.VITE_API_URL;
   }
   
-  if (isNativePlatform()) {
-    // Default fallback for Android Emulator
-    return 'http://10.0.2.2:5000/api';
-  }
-  
-  return '/api';
+  return 'https://civicchain-8b15.onrender.com/api';
 };
 
 export const setApiBaseUrl = (url) => {
@@ -50,7 +54,7 @@ export const testConnection = async (testUrl) => {
   const healthEndpoint = target.endsWith('/api') ? `${target}/health` : `${target}/api/health`;
   const startTime = Date.now();
   try {
-    const res = await axios.get(healthEndpoint, { timeout: 5000 });
+    const res = await axios.get(healthEndpoint, { timeout: 35000 });
     const latency = Date.now() - startTime;
     return {
       ok: true,
@@ -68,6 +72,7 @@ export const testConnection = async (testUrl) => {
 };
 
 const api = axios.create({
+  timeout: 35000,
   headers: { 'Content-Type': 'application/json' }
 });
 
@@ -85,7 +90,10 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    const url = error.config?.url || '';
+    const isResourceError = url.includes('/evidence/') || error.config?.skipAuthRedirect;
+
+    if (error.response?.status === 401 && !isResourceError) {
       localStorage.removeItem('civicchain_token');
       localStorage.removeItem('civicchain_user');
       if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {

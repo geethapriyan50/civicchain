@@ -10,6 +10,10 @@ yarn-debug.log*
 yarn-error.log*
 
 # Build outputs
+*.apk
+*.zip
+backend/data/*.db-shm
+backend/data/*.db-wal
 frontend/dist/
 frontend/dist-ssr/
 frontend/android/app/build/

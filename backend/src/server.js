@@ -7,7 +7,12 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 
-dotenv.config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Load environment variables from backend/.env or root
+dotenv.config({ path: path.join(__dirname, '../.env') });
+dotenv.config(); // fallback
 
 import { initDatabase } from './config/database.js';
 import authRoutes from './routes/auth.js';
@@ -16,9 +21,9 @@ import userRoutes from './routes/users.js';
 import dashboardRoutes from './routes/dashboard.js';
 import evidenceRoutes from './routes/evidence.js';
 import blockchainRoutes from './routes/blockchain.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import { authenticate } from './middleware/auth.js';
+import { getEvidenceFileByFilename } from './controllers/evidenceController.js';
+import { getBlockchainService } from './services/blockchainService.js';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -84,8 +89,9 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Logging
 app.use(morgan('combined'));
 
-// Static files - serve uploads
-app.use('/uploads', express.static(path.join(__dirname, '../../uploads')));
+// File routes - avatars can be static, evidence is strictly authenticated and authorization-checked
+app.use('/uploads/avatars', express.static(path.join(__dirname, '../../uploads/avatars')));
+app.get('/uploads/evidence/:filename', authenticate, getEvidenceFileByFilename);
 
 // Initialize DB
 await initDatabase();
@@ -98,12 +104,25 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/evidence', evidenceRoutes);
 app.use('/api/blockchain', blockchainRoutes);
 
-// Health check
-app.get('/api/health', (req, res) => {
+// Health check with honest blockchain mode and gateway status reporting
+app.get('/api/health', async (req, res) => {
+  const mode = process.env.BLOCKCHAIN_MODE || 'mock';
+  const isFabric = (mode === 'fabric');
+  let fabricStatus = null;
+
+  if (isFabric) {
+    try {
+      const service = getBlockchainService();
+      fabricStatus = await service.checkConnection();
+    } catch (_) {}
+  }
+
   res.json({
-    status: 'ok',
+    status: (isFabric && !fabricStatus?.connected) ? 'degraded' : 'ok',
     timestamp: new Date().toISOString(),
-    blockchain_mode: process.env.BLOCKCHAIN_MODE || 'mock',
+    blockchain_mode: mode,
+    isMock: !isFabric,
+    fabric_connected: isFabric ? !!fabricStatus?.connected : false,
     version: '1.0.0'
   });
 });

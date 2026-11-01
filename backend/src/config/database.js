@@ -3,6 +3,7 @@ import sqlite3 from 'sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import crypto from 'crypto';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -16,6 +17,29 @@ if (!fs.existsSync(dbDir)) {
 }
 
 let _db = null;
+
+function canonicalizeJson(obj) {
+  if (obj === null || typeof obj !== 'object') {
+    return JSON.stringify(obj);
+  }
+  if (Array.isArray(obj)) {
+    return '[' + obj.map(canonicalizeJson).join(',') + ']';
+  }
+  const keys = Object.keys(obj).sort();
+  return '{' + keys.map(k => JSON.stringify(k) + ':' + canonicalizeJson(obj[k])).join(',') + '}';
+}
+
+function computeHashChainDigest(previousHash, record) {
+  const canonical = canonicalizeJson({
+    block_number: Number(record.block_number),
+    complaint_id: record.complaint_id || '',
+    event_type: String(record.event_type),
+    payload_hash: String(record.payload_hash || ''),
+    timestamp: String(record.timestamp),
+    tx_id: String(record.tx_id)
+  });
+  return crypto.createHash('sha256').update(`${previousHash}|${canonical}`).digest('hex');
+}
 
 export async function initDatabase() {
   _db = await open({
@@ -113,8 +137,11 @@ export async function initDatabase() {
       tx_id TEXT NOT NULL,
       complaint_id TEXT,
       event_type TEXT NOT NULL,
-      payload_hash TEXT,
-      block_number INTEGER,
+      payload TEXT,
+      payload_hash TEXT NOT NULL,
+      previous_hash TEXT NOT NULL,
+      record_hash TEXT NOT NULL,
+      block_number INTEGER NOT NULL,
       timestamp TEXT NOT NULL,
       mode TEXT NOT NULL DEFAULT 'mock',
       created_at TEXT NOT NULL
@@ -137,7 +164,60 @@ export async function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_complaints_category ON complaints(category);
     CREATE INDEX IF NOT EXISTS idx_complaint_events_complaint ON complaint_events(complaint_id);
     CREATE INDEX IF NOT EXISTS idx_evidence_complaint ON evidence(complaint_id);
+    CREATE INDEX IF NOT EXISTS idx_blockchain_records_block ON blockchain_records(block_number);
   `);
+
+  // Migrate existing blockchain_records if table existed with old schema
+  const tableInfo = await _db.all("PRAGMA table_info(blockchain_records)");
+  const columnNames = tableInfo.map(c => c.name);
+  if (!columnNames.includes('previous_hash')) {
+    await _db.exec("ALTER TABLE blockchain_records ADD COLUMN previous_hash TEXT;");
+  }
+  if (!columnNames.includes('record_hash')) {
+    await _db.exec("ALTER TABLE blockchain_records ADD COLUMN record_hash TEXT;");
+  }
+  if (!columnNames.includes('payload')) {
+    await _db.exec("ALTER TABLE blockchain_records ADD COLUMN payload TEXT;");
+  }
+
+  // Migrate evidence table for permanent cloud storage
+  const evInfo = await _db.all("PRAGMA table_info(evidence)");
+  const evCols = evInfo.map(c => c.name);
+  if (!evCols.includes('cloudinary_url')) {
+    await _db.exec("ALTER TABLE evidence ADD COLUMN cloudinary_url TEXT;");
+  }
+
+  // Backfill any existing rows missing previous_hash / record_hash sequentially
+  const unlinkedRecords = await _db.all(
+    "SELECT rowid, * FROM blockchain_records WHERE previous_hash IS NULL OR record_hash IS NULL ORDER BY block_number ASC, rowid ASC"
+  );
+  if (unlinkedRecords.length > 0) {
+    const allRecords = await _db.all("SELECT rowid, * FROM blockchain_records ORDER BY block_number ASC, rowid ASC");
+    let prevHash = "0".repeat(64);
+    let blockNum = 1;
+
+    for (const rec of allRecords) {
+      const pHash = prevHash;
+      const bNum = blockNum++;
+      const payloadHash = rec.payload_hash || crypto.createHash('sha256').update(rec.tx_id + rec.event_type).digest('hex');
+      const recHash = computeHashChainDigest(pHash, {
+        block_number: bNum,
+        complaint_id: rec.complaint_id,
+        event_type: rec.event_type,
+        payload_hash: payloadHash,
+        timestamp: rec.timestamp,
+        tx_id: rec.tx_id
+      });
+
+      await _db.run(
+        `UPDATE blockchain_records
+         SET previous_hash = ?, record_hash = ?, block_number = ?, payload_hash = ?
+         WHERE rowid = ?`,
+        [pHash, recHash, bNum, payloadHash, rec.rowid]
+      );
+      prevHash = recHash;
+    }
+  }
 
   console.log('✅ Database initialized at', DB_PATH);
   return _db;

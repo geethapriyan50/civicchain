@@ -168,8 +168,8 @@ export default function AppLayout() {
       </aside>
 
       {/* Main App Container */}
-      <div className="main-shell" style={{ flex: 1, minWidth: 0, paddingLeft: '232px' }}>
-        {/* Topbar matching Emerald Ledger Vision */}
+      <div className="main-shell">
+        {/* Topbar matching Emerald Ledger Vision / FlutterFlow Header */}
         <header className="topbar">
           <div className="breadcrumb" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <button
@@ -181,15 +181,22 @@ export default function AppLayout() {
             >
               {mobileOpen ? <X size={18} /> : <Menu size={18} />}
             </button>
-            <span style={{ color: 'var(--muted-foreground)', fontSize: '13px' }}>Workspace</span>
-            <ChevronRight size={12} style={{ color: 'var(--muted-foreground)' }} />
-            <span style={{ fontWeight: 600, fontSize: '13px' }}>{getBreadcrumbTitle()}</span>
+            <div className="mobile-brand-title" style={{ display: 'none' }}>
+              <div style={{ fontWeight: 700, fontSize: '15px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Link2 size={16} color="var(--primary)" />
+                <span>CivicChain</span>
+              </div>
+              <div style={{ fontSize: '10px', color: 'var(--muted-foreground)' }}>District 4 Ledger • Public Trust</div>
+            </div>
+            <span className="desktop-crumb" style={{ color: 'var(--muted-foreground)', fontSize: '13px' }}>Workspace</span>
+            <ChevronRight className="desktop-crumb" size={12} style={{ color: 'var(--muted-foreground)' }} />
+            <span className="desktop-crumb" style={{ fontWeight: 600, fontSize: '13px' }}>{getBreadcrumbTitle()}</span>
           </div>
 
           <div className="topbar-actions">
             <div className="network-pill">
               <span className="status-dot" />
-              <span>Fabric mainnet</span>
+              <span>Tamper-proof Ledger Online</span>
             </div>
 
             <div className="profile" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -211,7 +218,7 @@ export default function AppLayout() {
               >
                 {initials}
               </div>
-              <span style={{ fontSize: '12px', fontWeight: 600 }}>{user?.name || 'User'}</span>
+              <span className="desktop-profile-name" style={{ fontSize: '12px', fontWeight: 600 }}>{user?.name || 'User'}</span>
               <span className="tag" style={{ fontSize: '9px', padding: '2px 6px' }}>
                 {user?.role || 'CITIZEN'}
               </span>
@@ -220,9 +227,54 @@ export default function AppLayout() {
         </header>
 
         {/* Content Outlet */}
-        <main className="page-content" style={{ padding: '24px 32px' }}>
+        <main className="page-content">
           <Outlet />
         </main>
+
+        {/* FlutterFlow Mobile Bottom Navigation Bar */}
+        <nav className="mobile-bottom-nav">
+          <NavLink
+            to={getDashboardPath()}
+            className={({ isActive }) => `mobile-nav-tab ${isActive ? 'active' : ''}`}
+          >
+            <LayoutDashboard size={20} />
+            <span>Dashboard</span>
+          </NavLink>
+
+          <NavLink
+            to="/complaints"
+            className={({ isActive }) => `mobile-nav-tab ${isActive ? 'active' : ''}`}
+          >
+            <FileText size={20} />
+            <span>Grievances</span>
+          </NavLink>
+
+          {(user?.role === 'CITIZEN' || user?.role === 'ADMIN') && (
+            <Link
+              to="/complaints/new"
+              className="mobile-fab"
+              aria-label="Report New Grievance"
+            >
+              <PlusCircle size={26} />
+            </Link>
+          )}
+
+          <NavLink
+            to="/ledger"
+            className={({ isActive }) => `mobile-nav-tab ${isActive ? 'active' : ''}`}
+          >
+            <Layers size={20} />
+            <span>Ledger</span>
+          </NavLink>
+
+          <NavLink
+            to="/profile"
+            className={({ isActive }) => `mobile-nav-tab ${isActive ? 'active' : ''}`}
+          >
+            <User size={20} />
+            <span>Profile</span>
+          </NavLink>
+        </nav>
       </div>
     </div>
   );

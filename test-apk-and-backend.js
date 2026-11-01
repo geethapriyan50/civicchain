@@ -95,6 +95,10 @@ function makeRequest(options, postData = null) {
 
 async function runBackendTests() {
   try {
+    try {
+      await import('./backend/src/server.js');
+      await new Promise(r => setTimeout(r, 1000));
+    } catch (_) {}
     // Health Check
     const healthRes = await makeRequest({
       hostname: '127.0.0.1',

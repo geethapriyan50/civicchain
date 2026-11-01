@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { getDb } from '../config/database.js';
 import { getBlockchainService, ACTION_TO_STATUS, validateTransition } from '../services/blockchainService.js';
+import { checkUserComplaintAccess } from '../middleware/auth.js';
 
 const CATEGORIES = [
   'Roads', 'Streetlights', 'Drainage', 'Water Supply', 'Sanitation',
@@ -101,13 +102,13 @@ export async function getComplaint(req, res) {
     );
     if (!complaint) return res.status(404).json({ error: 'Complaint not found' });
 
-    if (req.user.role === 'CITIZEN' && complaint.citizen_id !== req.user.id) {
-      return res.status(403).json({ error: 'Access denied' });
+    if (!checkUserComplaintAccess(req.user, complaint)) {
+      return res.status(403).json({ error: 'Access denied: not authorized to view this complaint' });
     }
 
     const evidence = await db.all(
       `SELECT e.id, e.filename, e.original_name, e.file_size, e.mime_type,
-              e.sha256_hash, e.description, e.is_investigation_evidence,
+              e.sha256_hash, e.blockchain_hash, e.description, e.is_investigation_evidence,
               e.created_at, u.name as uploaded_by_name
        FROM evidence e LEFT JOIN users u ON e.uploaded_by = u.id
        WHERE e.complaint_id = ? ORDER BY e.created_at ASC`,
@@ -348,28 +349,31 @@ export async function submitCitizenFeedback(req, res) {
     const now = new Date().toISOString();
     const txId = `TX:FEEDBACK:${req.params.id.slice(-6).toUpperCase()}:${Date.now().toString(16).toUpperCase()}`;
 
+    // Anchor feedback onto the cryptographic hash-chain ledger
+    const blockchainService = getBlockchainService();
+    const bcRec = await blockchainService.recordFeedback({
+      complaintId: req.params.id,
+      rating: numRating,
+      comments,
+      citizenId: req.user.id,
+      txId
+    });
+
     await db.run(
       `INSERT INTO citizen_feedback (id, complaint_id, citizen_id, rating, comments, blockchain_tx_id, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [id, req.params.id, req.user.id, numRating, comments || null, txId, now]
-    );
-
-    const payloadHash = crypto.createHash('sha256').update(JSON.stringify({ complaintId: req.params.id, rating: numRating, comments })).digest('hex');
-    await db.run(
-      `INSERT INTO blockchain_records (id, tx_id, complaint_id, event_type, payload_hash, block_number, timestamp, mode, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [uuidv4(), txId, req.params.id, 'CITIZEN_FEEDBACK', payloadHash, Math.floor(Math.random() * 500000) + 100000, now, 'mock', now]
+      [id, req.params.id, req.user.id, numRating, comments || null, bcRec.txId, now]
     );
 
     await db.run(
       `INSERT INTO complaint_events (id, complaint_id, event_type, from_status, to_status, performed_by, performer_role, notes, blockchain_tx_id, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [uuidv4(), req.params.id, 'CITIZEN_FEEDBACK', complaint.status, complaint.status, req.user.id, req.user.role, `Citizen Rating: ${numRating}/5 Stars. Comments: ${comments || 'None'}`, txId, now]
+      [uuidv4(), req.params.id, 'CITIZEN_FEEDBACK', complaint.status, complaint.status, req.user.id, req.user.role, `Citizen Rating: ${numRating}/5 Stars. Comments: ${comments || 'None'}`, bcRec.txId, now]
     );
 
     res.status(201).json({
       message: 'Citizen feedback and rating recorded on ledger',
-      feedback: { id, rating: numRating, comments, blockchain_tx_id: txId, created_at: now }
+      feedback: { id, rating: numRating, comments, blockchain_tx_id: bcRec.txId, created_at: now }
     });
   } catch (err) {
     console.error('Feedback error:', err);

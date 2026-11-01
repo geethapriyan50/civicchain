@@ -2,12 +2,19 @@ import jwt from 'jsonwebtoken';
 import { getDb } from '../config/database.js';
 
 export async function authenticate(req, res, next) {
+  let token = null;
   const authHeader = req.headers['authorization'];
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.slice(7);
+  } else if (req.query && req.query.token) {
+    token = req.query.token;
+  }
+
+  if (!token) {
     return res.status(401).json({ error: 'Authentication required' });
   }
 
-  const token = authHeader.slice(7);
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const db = getDb();
@@ -35,4 +42,27 @@ export function authorize(...roles) {
     }
     next();
   };
+}
+
+/**
+ * Checks if authenticated user has permission to view or interact with a given complaint/evidence.
+ * Enforces strict citizen boundaries (citizens can only access their own complaints) and
+ * role/jurisdiction workflow rules for authority, investigator, verifier, and admin.
+ */
+export function checkUserComplaintAccess(user, complaint) {
+  if (!user || !user.role || !complaint) return false;
+
+  const role = user.role.toUpperCase();
+
+  // Admin, Authority, Investigator, Verifier staff roles can view any complaint & evidence
+  if (['ADMIN', 'AUTHORITY', 'INVESTIGATOR', 'VERIFIER'].includes(role)) {
+    return true;
+  }
+
+  // Citizens can access their own complaints
+  if (role === 'CITIZEN') {
+    return complaint.citizen_id === user.id;
+  }
+
+  return false;
 }

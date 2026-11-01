@@ -87,7 +87,7 @@ export default function LoginPage() {
           </p>
         </div>
 
-        {/* Security & Masked Network Status Banner (No raw IP visible) */}
+        {/* Security & Masked Network Status Banner */}
         <div style={{
           marginBottom: 16,
           padding: '10px 14px',
@@ -118,10 +118,10 @@ export default function LoginPage() {
             )}
             <span style={{ fontSize: '0.78rem', fontWeight: 500 }}>
               {testStatus.loading
-                ? 'Securing network handshake...'
+                ? 'Connecting to Render Cloud (~20s if waking up)...'
                 : testStatus.result?.ok
-                ? 'Protected Gateway Online'
-                : 'Network Gateway Offline'}
+                ? `Gateway Online (${testStatus.result.latency || 0}ms)`
+                : 'Server Sleeping / Tap to Wake'}
             </span>
           </div>
 
@@ -141,11 +141,11 @@ export default function LoginPage() {
               gap: 4
             }}
           >
-            <Cpu size={12} /> {showAdvancedNetwork ? 'Hide Network' : 'Network Route'}
+            <Cpu size={12} /> {showAdvancedNetwork ? 'Hide' : 'Server Route'}
           </button>
         </div>
 
-        {/* Masked Network Route Selector (Hides internal IPs behind friendly node names) */}
+        {/* Masked Network Route Selector */}
         {showAdvancedNetwork && (
           <div style={{
             marginBottom: 20,
@@ -156,85 +156,69 @@ export default function LoginPage() {
             fontSize: '0.8rem'
           }}>
             <div style={{ fontWeight: 600, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-primary)' }}>
-              <Lock size={13} color="var(--primary)" /> Secure Network Routing
+              <Lock size={13} color="var(--primary)" /> Gateway Route Options
             </div>
             
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 10 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 8, marginBottom: 10 }}>
               <button
                 type="button"
-                onClick={() => handleSelectNetworkNode('mobile', 'http://192.168.29.19:5000/api')}
+                onClick={() => handleSelectNetworkNode('render', 'https://civicchain-8b15.onrender.com/api')}
                 style={{
-                  background: selectedNode === 'mobile' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255,255,255,0.04)',
-                  border: `1px solid ${selectedNode === 'mobile' ? 'var(--primary)' : 'var(--border)'}`,
-                  borderRadius: 6,
-                  padding: '8px 10px',
-                  fontSize: '0.74rem',
-                  color: 'var(--text-primary)',
+                  background: 'rgba(0, 210, 106, 0.12)',
+                  border: '1px solid rgba(0, 210, 106, 0.4)',
+                  borderRadius: 8,
+                  padding: '10px 12px',
+                  fontSize: '0.78rem',
+                  color: '#ffffff',
                   cursor: 'pointer',
                   textAlign: 'left'
                 }}
               >
-                📶 <strong>Mobile Wireless Link</strong><br/>
-                <span style={{ color: 'var(--text-muted)', fontSize: '0.68rem' }}>Optimized for Phone/APK</span>
+                ☁️ <strong>Live Render Cloud Gateway (Recommended)</strong><br/>
+                <span style={{ color: '#00D26A', fontSize: '0.7rem' }}>https://civicchain-8b15.onrender.com/api</span>
               </button>
 
-              <button
-                type="button"
-                onClick={() => handleSelectNetworkNode('emulator', 'http://10.0.2.2:5000/api')}
-                style={{
-                  background: selectedNode === 'emulator' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255,255,255,0.04)',
-                  border: `1px solid ${selectedNode === 'emulator' ? 'var(--primary)' : 'var(--border)'}`,
-                  borderRadius: 6,
-                  padding: '8px 10px',
-                  fontSize: '0.74rem',
-                  color: 'var(--text-primary)',
-                  cursor: 'pointer',
-                  textAlign: 'left'
-                }}
-              >
-                📱 <strong>Virtual Mobile Node</strong><br/>
-                <span style={{ color: 'var(--text-muted)', fontSize: '0.68rem' }}>Sandboxed Environment</span>
-              </button>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                <button
+                  type="button"
+                  onClick={() => handleSelectNetworkNode('local', 'http://192.168.29.19:5000/api')}
+                  style={{
+                    background: 'rgba(255,255,255,0.04)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 6,
+                    padding: '8px',
+                    fontSize: '0.72rem',
+                    color: 'var(--text-primary)',
+                    cursor: 'pointer',
+                    textAlign: 'left'
+                  }}
+                >
+                  📶 <strong>Local Wi-Fi</strong><br/>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '0.65rem' }}>192.168.x:5000</span>
+                </button>
 
-              <button
-                type="button"
-                onClick={() => handleSelectNetworkNode('cloud', 'http://localhost:5000/api')}
-                style={{
-                  background: selectedNode === 'cloud' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255,255,255,0.04)',
-                  border: `1px solid ${selectedNode === 'cloud' ? 'var(--primary)' : 'var(--border)'}`,
-                  borderRadius: 6,
-                  padding: '8px 10px',
-                  fontSize: '0.74rem',
-                  color: 'var(--text-primary)',
-                  cursor: 'pointer',
-                  textAlign: 'left'
-                }}
-              >
-                🏢 <strong>Municipal Cloud Core</strong><br/>
-                <span style={{ color: 'var(--text-muted)', fontSize: '0.68rem' }}>Local Web Gateway</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleTestConnection()}
-                disabled={testStatus.loading}
-                style={{
-                  background: 'rgba(59, 130, 246, 0.1)',
-                  border: '1px solid rgba(59, 130, 246, 0.3)',
-                  borderRadius: 6,
-                  padding: '8px 10px',
-                  fontSize: '0.74rem',
-                  color: '#60a5fa',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 4
-                }}
-              >
-                <RefreshCw size={12} className={testStatus.loading ? 'spin' : ''} />
-                Verify Handshake
-              </button>
+                <button
+                  type="button"
+                  onClick={() => handleTestConnection()}
+                  disabled={testStatus.loading}
+                  style={{
+                    background: 'rgba(59, 130, 246, 0.1)',
+                    border: '1px solid rgba(59, 130, 246, 0.3)',
+                    borderRadius: 6,
+                    padding: '8px',
+                    fontSize: '0.74rem',
+                    color: '#60a5fa',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 4
+                  }}
+                >
+                  <RefreshCw size={12} className={testStatus.loading ? 'spin' : ''} />
+                  Ping Server
+                </button>
+              </div>
             </div>
           </div>
         )}

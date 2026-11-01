@@ -7,7 +7,7 @@ import {
   submitCitizenFeedback
 } from '../controllers/complaintController.js';
 import { authenticate, authorize } from '../middleware/auth.js';
-import { upload, uploadEvidence } from '../controllers/evidenceController.js';
+import { handleUploadMiddleware, uploadEvidence } from '../controllers/evidenceController.js';
 
 const router = express.Router();
 
@@ -34,6 +34,6 @@ router.put('/:id/close',             authorize('ADMIN', 'AUTHORITY'), closeCompl
 router.post('/:id/feedback',         authorize('CITIZEN', 'ADMIN'), submitCitizenFeedback);
 
 // Evidence
-router.post('/:id/evidence', upload.single('file'), uploadEvidence);
+router.post('/:id/evidence', handleUploadMiddleware, uploadEvidence);
 
 export default router;

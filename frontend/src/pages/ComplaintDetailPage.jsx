@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../services/api';
@@ -7,6 +7,168 @@ import { StatusBadge, PriorityBadge, LoadingSpinner, InfoRow } from '../componen
 import { Upload, CheckCircle, AlertTriangle, Shield, ExternalLink } from 'lucide-react';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
+
+// ── Authenticated evidence viewer ─────────────────────────────────────────
+// Fetches evidence via Axios (Bearer token included automatically) and
+// renders the bytes as a blob URL so the image works on native Capacitor
+// apps (where relative /api/… paths don't resolve to the cloud server).
+function EvidenceImage({ evidenceId, originalName }) {
+  const [blobUrl, setBlobUrl] = useState(null);
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const prevUrl = useRef(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchImage = async () => {
+      try {
+        const { default: axiosApi } = await import('../services/api');
+        const res = await axiosApi.get(`/evidence/${evidenceId}/file`, {
+          responseType: 'blob',
+        });
+        if (isMounted) {
+          const url = URL.createObjectURL(res.data);
+          prevUrl.current = url;
+          setBlobUrl(url);
+          setLoading(false);
+        }
+      } catch (err) {
+        if (isMounted) {
+          const status = err.response?.status;
+          let reason = 'Image unavailable';
+          if (status === 404) reason = '⚠️ File missing from cloud storage (cleared during server restart)';
+          else if (status === 403) reason = '🔒 Access restricted: Citizens can only view photos on their own complaints';
+          setError(reason);
+          setLoading(false);
+        }
+      }
+    };
+    fetchImage();
+    return () => {
+      isMounted = false;
+      if (prevUrl.current) URL.revokeObjectURL(prevUrl.current);
+    };
+  }, [evidenceId]);
+
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', background: 'rgba(255,255,255,0.03)', borderRadius: 8, marginTop: 8 }}>
+        <div className="loading-spinner" style={{ width: 14, height: 14 }} />
+        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Loading image...</span>
+      </div>
+    );
+  }
+
+  if (error || !blobUrl) {
+    return (
+      <div style={{ fontSize: '0.78rem', color: '#f87171', marginTop: 6, background: 'rgba(239, 68, 68, 0.08)', padding: '6px 10px', borderRadius: 6, border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+        {typeof error === 'string' ? error : 'Image unavailable'}
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div
+        onClick={() => setOpen(true)}
+        style={{
+          cursor: 'pointer',
+          borderRadius: 8,
+          overflow: 'hidden',
+          border: '1px solid var(--border)',
+          display: 'inline-block',
+          marginTop: 8,
+          maxWidth: '100%',
+        }}
+        title="Tap to expand photo"
+      >
+        <img
+          src={blobUrl}
+          alt={originalName}
+          style={{
+            width: '100%',
+            maxHeight: 240,
+            objectFit: 'cover',
+            display: 'block',
+            borderRadius: 6,
+          }}
+        />
+      </div>
+
+      {open && (
+        <div
+          onClick={() => setOpen(false)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 9999,
+            background: 'rgba(0,0,0,0.9)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            flexDirection: 'column', gap: 12, padding: 16,
+          }}
+        >
+          <img
+            src={blobUrl}
+            alt={originalName}
+            style={{ maxWidth: '95vw', maxHeight: '80vh', borderRadius: 8, objectFit: 'contain' }}
+            onClick={e => e.stopPropagation()}
+          />
+          <div style={{ color: '#94a3b8', fontSize: '0.8rem' }}>
+            {originalName} — tap outside to close
+          </div>
+          <a
+            href={blobUrl}
+            download={originalName}
+            className="btn btn-primary btn-sm"
+            onClick={e => e.stopPropagation()}
+          >
+            ⬇ Download Original
+          </a>
+        </div>
+      )}
+    </>
+  );
+}
+
+// ── Generic authenticated file download (PDF / video / doc) ───────────────
+function EvidenceDownload({ evidenceId, originalName }) {
+  const [loading, setLoading] = useState(false);
+
+  const download = async () => {
+    setLoading(true);
+    try {
+      const { default: axiosApi } = await import('../services/api');
+      const res = await axiosApi.get(`/evidence/${evidenceId}/file`, {
+        responseType: 'blob',
+      });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = originalName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    } catch {
+      toast.error('Could not download file — access denied or file missing');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <button
+      className="btn btn-secondary btn-sm"
+      onClick={download}
+      disabled={loading}
+      title="Download file"
+      style={{ minWidth: 34 }}
+    >
+      {loading
+        ? <div className="loading-spinner" style={{ width: 14, height: 14 }} />
+        : <ExternalLink size={14} />}
+    </button>
+  );
+}
 
 const ACTION_CONFIG = {
   REPORTED:             { action: 'register',           label: 'Register Complaint',       roles: ['AUTHORITY','ADMIN'], color: '#6366f1' },
@@ -118,10 +280,14 @@ export default function ComplaintDetailPage() {
   const verifyEvidence = async (evidenceId) => {
     try {
       const { data } = await api.get(`/evidence/${evidenceId}/verify`);
-      if (data.isIntact) {
+      if (data.status === 'VERIFIED') {
         toast.success('✅ Evidence integrity verified — not tampered');
-      } else {
+      } else if (data.status === 'MISMATCH') {
         toast.error('❌ Hash mismatch — possible tampering detected!');
+      } else if (data.status === 'MISSING_FILE') {
+        toast.error('⚠️ Evidence file missing — cannot verify');
+      } else {
+        toast.error('⚠️ Verification unavailable: ' + (data.message || 'unknown error'));
       }
     } catch { toast.error('Verification failed'); }
   };
@@ -183,31 +349,39 @@ export default function ComplaintDetailPage() {
 
           {/* Evidence */}
           <div className="card" style={{ marginBottom: 16 }}>
-            <div className="section-title">Evidence ({evidence?.length || 0})</div>
+            <div className="section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>Evidence ({evidence?.length || 0})</span>
+              <span className="badge" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.3)', textTransform: 'none', fontSize: '0.7rem' }}>
+                🛡️ Tamper-Proof Ledger Anchored
+              </span>
+            </div>
             {evidence?.map(ev => (
-              <div key={ev.id} style={{ padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <div>
-                    <div style={{ fontSize: '0.88rem', fontWeight: 600 }}>{ev.original_name}</div>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                      {ev.mime_type} • {(ev.file_size / 1024).toFixed(1)} KB • {ev.uploaded_by_name}
+              <div key={ev.id} style={{ padding: '14px', marginBottom: 12, background: 'rgba(255,255,255,0.02)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8 }}>
+                  <div style={{ flex: 1, minWidth: 200 }}>
+                    <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)' }}>{ev.original_name}</div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 2 }}>
+                      {ev.mime_type} • {(ev.file_size / 1024).toFixed(1)} KB • Uploaded by {ev.uploaded_by_name}
                     </div>
-                    <div className="font-mono" style={{ fontSize: '0.68rem', color: '#67e8f9', marginTop: 2 }}>
+                    <div className="font-mono" style={{ fontSize: '0.68rem', color: '#67e8f9', marginTop: 4, background: 'rgba(6, 182, 212, 0.08)', padding: '3px 6px', borderRadius: 4, display: 'inline-block' }}>
                       SHA256: {ev.sha256_hash?.slice(0, 32)}...
                     </div>
-                    {ev.description && <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: 2 }}>{ev.description}</div>}
+                    {ev.description && <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: 4 }}>{ev.description}</div>}
                   </div>
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    <button className="btn btn-secondary btn-sm" onClick={() => verifyEvidence(ev.id)} title="Verify integrity">
-                      <Shield size={14} /> Verify
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    <button className="btn btn-secondary btn-sm" onClick={() => verifyEvidence(ev.id)} title="Cryptographically verify integrity">
+                      <Shield size={14} style={{ color: '#34d399' }} /> Verify Ledger
                     </button>
-                    {ev.mime_type?.startsWith('image/') && (
-                      <a href={`/uploads/evidence/${ev.filename}`} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm">
-                        <ExternalLink size={14} />
-                      </a>
+                    {!ev.mime_type?.startsWith('image/') && (
+                      <EvidenceDownload evidenceId={ev.id} originalName={ev.original_name} />
                     )}
                   </div>
                 </div>
+
+                {/* Inline Image Preview */}
+                {ev.mime_type?.startsWith('image/') && (
+                  <EvidenceImage evidenceId={ev.id} originalName={ev.original_name} />
+                )}
               </div>
             ))}
 

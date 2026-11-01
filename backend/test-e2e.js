@@ -67,6 +67,10 @@ function uploadFile(options, filePath, fieldName, token) {
 
 async function runTests() {
   console.log('🧪 Starting CivicChain End-to-End Integration Test Suite...\n');
+  try {
+    await import('./src/server.js');
+    await new Promise(r => setTimeout(r, 1000));
+  } catch (_) {}
   let passed = 0;
   let failed = 0;
 

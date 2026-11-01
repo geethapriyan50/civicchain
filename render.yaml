@@ -16,3 +16,19 @@ services:
         value: mock
       - key: FRONTEND_URL
         value: "*"
+      - key: CLOUDINARY_URL
+        sync: false
+
+  - type: web
+    name: civicchain-frontend
+    env: static
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: ./dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_URL
+        value: https://civicchain-8b15.onrender.com/api
