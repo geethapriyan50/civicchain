@@ -115,6 +115,17 @@ export default function ComplaintDetailPage() {
     }
   };
 
+  const openEvidenceFile = async (evidenceId) => {
+    try {
+      const response = await api.get('/evidence/' + evidenceId + '/file', { responseType: 'blob' });
+      const objectUrl = URL.createObjectURL(response.data);
+      window.open(objectUrl, '_blank', 'noopener,noreferrer');
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Unable to open evidence file');
+    }
+  };
+
   const verifyEvidence = async (evidenceId) => {
     try {
       const { data } = await api.get(`/evidence/${evidenceId}/verify`);
@@ -202,9 +213,9 @@ export default function ComplaintDetailPage() {
                       <Shield size={14} /> Verify
                     </button>
                     {ev.mime_type?.startsWith('image/') && (
-                      <a href={`/uploads/evidence/${ev.filename}`} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm">
+                      <button type="button" onClick={() => openEvidenceFile(ev.id)} className="btn btn-secondary btn-sm" title="Open evidence">
                         <ExternalLink size={14} />
-                      </a>
+                      </button>
                     )}
                   </div>
                 </div>
